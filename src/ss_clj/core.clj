@@ -1,7 +1,7 @@
 (ns ss-clj.core
   (:gen-class)
   (:import (java.net ServerSocket Socket)
-           (java.io BufferedReader InputStreamReader InputStream)))
+           (java.io BufferedReader InputStreamReader InputStream ByteArrayInputStream)))
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -47,12 +47,12 @@
   (assert ; test two method
    (= (let [zbuff (byte-array [(byte 0x05) (byte 0x02) (byte 0x00) (byte 0x01)])]
         (with-open [test-is (ByteArrayInputStream. zbuff)]
-          (process-socket5-request test-is)))
+          (process-sock5-handshake-request test-is)))
       {:version 5 :nmethods 2 :methods '(0 1)}))
   (assert ; test under 5
    (= (let [zbuff (byte-array [(byte 0x03) (byte 0x02) (byte 0x00) (byte 0x01)])]
         (with-open [test-is (ByteArrayInputStream. zbuff)]
-          (process-socket5-request test-is)))
+          (process-sock5-handshake-request test-is)))
       {:version 3})))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -79,7 +79,7 @@
           port (read-nbytes is 2)]
       (assoc {} :dst-addr addr :dst-port port))))
 
-(defn process-sock5-request
+(defn parse-sock5-request
   "process sock5 request into map, like"
   [is]
   (let [version (read-byte-to-int is)
@@ -94,6 +94,52 @@
            :atyp atyp
            :dst dst-addr)))
 
+(defn build-connect-relay
+  ""
+  [request]
+  (let [dst-addr (get-in request [:dst :dst-addr] ())
+        dst-port (get-in request [:dst :dst-port] ())
+        addr-size (count dst-addr)
+        port-size (count dst-port)
+        domain-addr-size-barray (if (= 3 (:atyp request)) ; one byte for domain addr size count, if atype == 3
+                                  [(int2byte (count dst-addr))]
+                                  [])]
+    (byte-array (+ 1 1 1 1 (count domain-addr-size-barray) addr-size port-size)
+                (concat [
+                         (unchecked-byte 0x05) ; Ver
+                         (unchecked-byte 0x00)     ; rep
+                         (unchecked-byte 0x00)     ; rsv
+                         (int2byte (:atyp request)) ; atyp
+                         ]
+                        domain-addr-size-barray           
+                        dst-addr
+                        dst-port))))
+
+(def method-not-supported
+  (byte-array [
+               (unchecked-byte 0x05)    ;Ver
+               (unchecked-byte 0x07)    ;rep
+               (unchecked-byte 0x00)    ;rsv
+               (unchecked-byte 0x01)    ;atype
+               (unchecked-byte 0x00)    ;addr0
+               (unchecked-byte 0x00)    ;
+               (unchecked-byte 0x00)    ;
+               (unchecked-byte 0x00)    ;addr3
+               (unchecked-byte 0x00)    ;port0
+               (unchecked-byte 0x00)    ;port1
+               ]))
+
+(defn process-sock5-request
+  ""
+  [request os]
+  (let [cmd (:cmd request)]
+    (cond (= cmd 0x1)                   ; Connect
+          (.write os (build-connect-relay request))
+          (= cmd 0x2)                   ; Bind
+          (.write os method-not-supported)
+          (= cmd 0x3)                   ; UDP Accociate
+          (.write os method-not-supported))))
+
 
 (defn dump-sock5-request-map
   "print request map"
@@ -105,21 +151,28 @@
     (println (assoc-in (assoc-in request-map [:dst :dst-addr] parsed-dst-addr)
                [:dst :dst-port] parsed-dst-port))))
 
+(defn handle-client-request
+  ""
+  [socket]
+  (println "new client request start\n")
+  (let [input-stream (.getInputStream socket)
+              output-stream (.getOutputStream socket)
+              request (process-sock5-handshake-request input-stream)]
+          (println request)
+          (if (= (:version request) 5)
+            (do (.write output-stream accept-request)
+                (let [request (parse-sock5-request input-stream)]
+                  (dump-sock5-request-map request)
+                  (process-sock5-request request output-stream)))
+            (.write output-stream deny-request))))
+
 (defn list-sock5-request
   []
   (with-open [server-socket (ServerSocket. 8008)]
     (println "Listening Port: " (.getLocalPort server-socket))
-    (let [socket (.accept server-socket)
-          input-stream (.getInputStream socket)
-          output-stream (.getOutputStream socket)
-          request (process-sock5-handshake-request input-stream)]
-      (println request)
-      (if (= (:version request) 5)
-        (do (.write output-stream accept-request)
-            (let [request (process-sock5-request input-stream)]
-              (dump-sock5-request-map request)))
-        (.write output-stream deny-request))
-      )))
+    (while true
+      (let [socket (.accept server-socket)]
+        (doto (Thread. (handle-client-request socket)) (.start))))))
 
 
 
