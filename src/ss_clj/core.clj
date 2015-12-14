@@ -1,7 +1,7 @@
 (ns ss-clj.core
   (:gen-class)
-  (:import (java.net ServerSocket Socket)
-           (java.io BufferedReader InputStreamReader InputStream ByteArrayInputStream)))
+  (:import (java.net ServerSocket Socket InetSocketAddress)
+           (java.io BufferedReader InputStreamReader InputStream ByteArrayInputStream PrintWriter)))
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -129,12 +129,33 @@
                (unchecked-byte 0x00)    ;port1
                ]))
 
+(defn bytearray->string
+  ""
+  [byte-array]
+  (reduce str "" (map char byte-array)))
+
+(defn bytearray->int
+  "format bytearray to int"
+  ([barray]
+   (bytearray->int barray (count barray)))
+  ([barray count]
+   (if (= count 0)
+     0
+     (let [current_byte_int (byte2int (aget barray 0))
+           current_shift (dec count)
+           current_byte_result (bit-shift-left current_byte_int (* 8 current_shift))]
+       (+ current_byte_result (bytearray->int (byte-array (rest barray)) (dec count)))))))
+
 (defn process-sock5-request
   ""
   [request os]
   (let [cmd (:cmd request)]
     (cond (= cmd 0x1)                   ; Connect
-          (.write os (build-connect-relay request))
+          (do (let [dst-addr (get-in request [:dst :dst-addr])
+                    host (bytearray->string dst-addr)
+                    ]
+                (println host))
+            (.write os (build-connect-relay request)))
           (= cmd 0x2)                   ; Bind
           (.write os method-not-supported)
           (= cmd 0x3)                   ; UDP Accociate
@@ -146,8 +167,8 @@
   [request-map]
   (let [dst-addr (get-in request-map [:dst :dst-addr] nil)
         dst-port (get-in request-map [:dst :dst-port] nil)
-        parsed-dst-addr (map #(char %) dst-addr)
-        parsed-dst-port (seq dst-port)]
+        parsed-dst-addr (bytearray->string dst-addr)
+        parsed-dst-port (bytearray->int dst-port)]
     (println (assoc-in (assoc-in request-map [:dst :dst-addr] parsed-dst-addr)
                [:dst :dst-port] parsed-dst-port))))
 
@@ -173,7 +194,6 @@
     (while true
       (let [socket (.accept server-socket)]
         (doto (Thread. (handle-client-request socket)) (.start))))))
-
 
 
 
