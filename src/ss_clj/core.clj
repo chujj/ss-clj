@@ -1,12 +1,7 @@
 (ns ss-clj.core
   (:gen-class)
-  (:import (java.net ServerSocket Socket InetSocketAddress)
+  (:import (java.net ServerSocket Socket InetSocketAddress UnknownHostException)
            (java.io BufferedReader InputStreamReader InputStream ByteArrayInputStream PrintWriter)))
-
-(defn -main
-  "I don't do a whole lot ... yet."
-  [& args]
-  (println "Hello, World!"))
 
 (defn byte2int [byte]
   (if (< byte 0)
@@ -94,26 +89,23 @@
            :atyp atyp
            :dst dst-addr)))
 
+(defn int2bytearray
+  "bytearrays length is 2"
+  [int]
+  (byte-array [(unchecked-byte (bit-shift-right int 8)) (unchecked-byte int)]))
+
 (defn build-connect-relay
   ""
-  [request]
-  (let [dst-addr (get-in request [:dst :dst-addr] ())
-        dst-port (get-in request [:dst :dst-port] ())
-        addr-size (count dst-addr)
-        port-size (count dst-port)
-        domain-addr-size-barray (if (= 3 (:atyp request)) ; one byte for domain addr size count, if atype == 3
-                                  [(int2byte (count dst-addr))]
-                                  [])]
-    (byte-array (+ 1 1 1 1 (count domain-addr-size-barray) addr-size port-size)
-                (concat [
-                         (unchecked-byte 0x05) ; Ver
-                         (unchecked-byte 0x00)     ; rep
-                         (unchecked-byte 0x00)     ; rsv
-                         (int2byte (:atyp request)) ; atyp
-                         ]
-                        domain-addr-size-barray           
-                        dst-addr
-                        dst-port))))
+  [request redirect-result]
+  (byte-array (+ 1 1 1 1 4 2)
+              (concat [
+                       (unchecked-byte 0x05)                   ; Ver
+                       (unchecked-byte (:rep redirect-result))   ; rep
+                       (unchecked-byte 0x00)                     ; rsv
+                       (unchecked-byte 0x01) ; atyp -> ipv4, always ipv4
+                       ]
+                      [0 0 0 0]         ;addr
+                      (int2bytearray (.getLocalPort (:socket redirect-result))))))
 
 (def method-not-supported
   (byte-array [
@@ -146,16 +138,60 @@
            current_byte_result (bit-shift-left current_byte_int (* 8 current_shift))]
        (+ current_byte_result (bytearray->int (byte-array (rest barray)) (dec count)))))))
 
+(defn bind-inputstream-to-outputstream
+  "read is to buff, write buff to os.
+  This Method is block when read or write "
+  [is os whoami]
+  (let [buff (byte-array 512)]
+    ;(println whoami "start")
+    (while (let [bytes-readed (.read is buff 0 512)
+                 continue? (> bytes-readed 0)]
+             (if continue?
+               (do
+                 ; (println whoami bytes-readed)
+                 (.write os buff 0 bytes-readed)
+                 (.flush os)))
+             continue?))
+    ;(println whoami "end")
+    ))
+
+(defn open-connect
+  "return map contain socket and reply code"
+  [host port]
+  (try
+    {:socket (Socket. host port) :rep 0x00}
+    (catch UnknownHostException e
+      {:socket nil :rep 0x03})
+    (catch Exception e
+      {:socket nil :rep 0x01})))
+
 (defn process-sock5-request
   ""
-  [request os]
+  [request socket is os]
   (let [cmd (:cmd request)]
     (cond (= cmd 0x1)                   ; Connect
-          (do (let [dst-addr (get-in request [:dst :dst-addr])
-                    host (bytearray->string dst-addr)
-                    ]
-                (println host))
-            (.write os (build-connect-relay request)))
+          (do
+            (let [dst-addr (get-in request [:dst :dst-addr])
+                  dst-port (get-in request [:dst :dst-port])
+                  host (bytearray->string dst-addr)
+                  port (bytearray->int    dst-port)
+                  redirect-socket-result (open-connect host port)]
+              (println host)
+              (.write os (build-connect-relay request redirect-socket-result))
+              (if (= 0 (:rep redirect-socket-result))
+                ;; loop read & write is streams
+                (with-open [proxy-socket (:socket redirect-socket-result)
+                            client-socket socket
+                            pis (.getInputStream proxy-socket)
+                            pos (.getOutputStream proxy-socket)
+                            cis is
+                            cos os]
+                  (println "start proxy loop: " (.getLocalPort proxy-socket))
+                  (doto (Thread. #(bind-inputstream-to-outputstream pis cos "pis->cos")) (.start))
+                  (bind-inputstream-to-outputstream cis pos "cis->pos")
+                  (println "end proxy loop"))
+                )
+              ))
           (= cmd 0x2)                   ; Bind
           (.write os method-not-supported)
           (= cmd 0x3)                   ; UDP Accociate
@@ -177,23 +213,27 @@
   [socket]
   (println "new client request start\n")
   (let [input-stream (.getInputStream socket)
-              output-stream (.getOutputStream socket)
-              request (process-sock5-handshake-request input-stream)]
-          (println request)
-          (if (= (:version request) 5)
-            (do (.write output-stream accept-request)
-                (let [request (parse-sock5-request input-stream)]
-                  (dump-sock5-request-map request)
-                  (process-sock5-request request output-stream)))
-            (.write output-stream deny-request))))
+        output-stream (.getOutputStream socket)
+        request (process-sock5-handshake-request input-stream)]
+    (println request)
+    (if (= (:version request) 5)
+      (do (.write output-stream accept-request)
+          (let [request (parse-sock5-request input-stream)]
+            (dump-sock5-request-map request)
+            (process-sock5-request request socket input-stream output-stream)))
+      (.write output-stream deny-request))))
 
-(defn list-sock5-request
+(defn socks5-server
   []
   (with-open [server-socket (ServerSocket. 8008)]
     (println "Listening Port: " (.getLocalPort server-socket))
     (while true
       (let [socket (.accept server-socket)]
-        (doto (Thread. (handle-client-request socket)) (.start))))))
+        (doto (Thread. #(handle-client-request socket)) (.start))))))
 
+(defn -main
+  "I don't do a whole lot ... yet."
+  [& args]
+  (socks5-server))
 
 
