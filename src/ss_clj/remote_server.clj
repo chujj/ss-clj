@@ -1,6 +1,7 @@
 (ns ss-clj.remote_server
   (:gen-class)
   (:use ss-clj.utils)
+  (:require [ss-clj.crypto :as crypto])
   (:import (java.net ServerSocket Socket InetSocketAddress UnknownHostException)
            (java.io BufferedReader InputStreamReader InputStream ByteArrayInputStream PrintWriter)))
 
@@ -96,8 +97,10 @@
                             cis is
                             cos os]
                   (println "start proxy loop: " (.getLocalPort proxy-socket))
-                  (doto (Thread. #(bind-inputstream-to-outputstream pis cos "pis->cos")) (.start))
-                  (bind-inputstream-to-outputstream cis pos "cis->pos")
+                  ;; (doto (Thread. #(bind-inputstream-to-outputstream pis cos "pis->cos")) (.start))
+                  ;; (bind-inputstream-to-outputstream cis pos "cis->pos")
+                  (doto (Thread. #(crypto/wraper-encrypto-inputstream-2-outputstream pis cos "pis->cos")) (.start))
+                  (crypto/unwraper-encrypto-inputstream-2-outputstream cis pos "cis->pos")
                   (println "end proxy loop"))
                 )
               ))
