@@ -117,7 +117,9 @@
         output-stream (.getOutputStream socket)
         request (process-openaccess-handshake-request input-stream)]
     (println request)
-    (if (= (seq (:open-access-key request)) (repeat 16 0)) ; TODO test open-access-key
+    (if (=                              ; test open-access-key
+         (String. (crypto/decrypto (:open-access-key request) crypto/TEST_KEY))
+         crypto/TEST_KEY)             
       (process-validate-open-access-request request socket input-stream output-stream)
       (.write output-stream deny-request))
     ))

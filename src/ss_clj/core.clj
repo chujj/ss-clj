@@ -36,19 +36,12 @@
   (doto (Thread. #(socket-server remote-server 8009)) (.start))
   (socket-server local-server 8008))
 
-(defn test-ss-local
-  ""
-  []
-  (doto (Thread. #(socket-server println-socket 8009)) (.start))
-  (socket-server local-server 8008))
-
-
 (def cli-options
   ;; An option with a required argument
-  [["-m" "--run-mode MODE" "MODEs: socks5-proxy rserver lserver"
+  [["-m" "--run-mode MODE" "MODEs: socks5-proxy rserver lserver dev-test"
     :default "socks5-proxy"
     :parse-fn #(str %)
-    :validate [#(or (= % "socks5-proxy") (= % "lserver") (= % "rserver")) "Must one of: socks5-proxy rserver lserver"]]
+    :validate [#(or (= % "socks5-proxy") (= % "lserver") (= % "rserver") (= % "dev-test")) "Must one of: socks5-proxy rserver lserver"]]
    [nil "--rserver-addr RServer-ADDR" "only work when mode==lserver"
     :default "127.0.0.1"
     ]

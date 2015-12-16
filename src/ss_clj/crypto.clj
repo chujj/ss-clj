@@ -21,15 +21,15 @@
 
 (defn decrypto
   ""
-  [data offset length key]
+  [data key]
   (let [cipher (Cipher/getInstance "AES/CBC/NOPadding" "SunJCE")
         keySpec (SecretKeySpec. (.getBytes key "utf-8") "AES")
         ivp (IvParameterSpec. IV)
         ]
     (do
       (.init cipher Cipher/DECRYPT_MODE keySpec ivp)
-      (println cipher data offset length)
-      (.doFinal cipher data offset length))))
+      (println cipher data)
+      (.doFinal cipher data))))
 
 
 
@@ -71,7 +71,7 @@
         buff (byte-array package-length)
         ]
     (while (let [readed-count (blockread-inputstream-align is buff 0 package-length)
-                 after-de-buff (decrypto buff 0 package-length  TEST_KEY)
+                 after-de-buff (decrypto buff  TEST_KEY)
                  payload-array (byte-array (take resver-length after-de-buff))
                  payload-size (bytearray->int payload-array)
                  continue? (> readed-count 0)
@@ -81,6 +81,19 @@
                  ;; copy resver length
                  (.write os  after-de-buff resver-length payload-size)))
              continue?))))
+
+(def crypto-methods
+  {"plain" {:init_fn #()
+            :wraper bind-inputstream-to-outputstream
+            :unwraper bind-inputstream-to-outputstream}
+   "aes-cbc-128" {:init_fn #(println "no implement")
+                  :wrapper wraper-encrypto-inputstream-2-outputstream
+                  :unwraper unwraper-encrypto-inputstream-2-outputstream}})
+
+(defn get-crypto-method
+  "{:crypto-method \"plain/aes-cbc-128\" :password \"[16bytes]\"}"
+  [crypto-config which-fn]
+  (get-in crypto-methods [(:crypto-method crypto-config) which-fn]))
 
 
 (defn test-wrap-unwrap

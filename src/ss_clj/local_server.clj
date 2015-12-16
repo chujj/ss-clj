@@ -104,7 +104,7 @@ Resp:
           is (.getInputStream remote-socket)
           os (.getOutputStream remote-socket)
           domain-addr-prefix-barray (if (= atyp 3) (byte-array 1 [(unchecked-byte (count dst-addr))]) [])
-          req-package (byte-array (concat open-access-key
+          req-package (byte-array (concat (crypto/encrypto open-access-key crypto/TEST_KEY)
                                           (byte-array [(int2byte method)])
                                           (byte-array [(int2byte atyp)])
                                           domain-addr-prefix-barray
@@ -138,7 +138,7 @@ Resp:
                 dst-port (get-in request [:dst :dst-port])
                 method 1
                 atyp (:atyp request)
-                open-access-key (byte-array 16 '(0))
+                open-access-key (.getBytes crypto/TEST_KEY "utf-8")
                 redirect-socket-result (open-connect-with-remote-server open-access-key method atyp dst-addr dst-port)]
             (println "connect done")
             (println redirect-socket-result)
