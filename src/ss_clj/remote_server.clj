@@ -87,7 +87,7 @@
                   port (bytearray->int    dst-port)
                   redirect-socket-result (open-connect host port)
                   password (:password local-config)]
-              (println host)
+              ;(println host)
               (.write os (build-open-access-reply request redirect-socket-result))
               (if (= 0 (:rep redirect-socket-result))
                 ;; loop read & write is streams
@@ -97,12 +97,13 @@
                             pos (.getOutputStream proxy-socket)
                             cis is
                             cos os]
-                  (println "start proxy loop: " (.getLocalPort proxy-socket))
+                  ;(println "start proxy loop: " (.getLocalPort proxy-socket))
                   ;; (doto (Thread. #(bind-inputstream-to-outputstream pis cos "pis->cos")) (.start))
                   ;; (bind-inputstream-to-outputstream cis pos "cis->pos")
                   (doto (Thread. #((get-in crypto/crypto-methods [(:crypto-method local-config) :wrapper])  pis cos "pis->cos" password)) (.start))
                   ((get-in crypto/crypto-methods [(:crypto-method local-config) :unwraper]) cis pos "cis->pos" password)
-                  (println "end proxy loop"))
+                  ;(println "end proxy loop")
+                  )
                 )
               ))
           (= cmd 0x2)                   ; Bind
@@ -113,11 +114,11 @@
 (defn handle-client-request
   ""
   [socket]
-  (println "new client request start\n")
+  ;(println "new client request start\n")
   (let [input-stream (.getInputStream socket)
         output-stream (.getOutputStream socket)
         request (process-openaccess-handshake-request input-stream)]
-    (println request)
+    ;(println request)
     (if (if (= "plain" (:crypto-method local-config)) (= (take 16 (repeat 0)) (seq (:open-access-key request)))
             (=                          ; test open-access-key
              (String. (crypto/decrypto (:open-access-key request) (:password local-config)))

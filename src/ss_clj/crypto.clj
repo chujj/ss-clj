@@ -28,7 +28,7 @@
         ]
     (do
       (.init cipher Cipher/DECRYPT_MODE keySpec ivp)
-      (println cipher data)
+      ;(println cipher data)
       (.doFinal cipher data))))
 
 (defn wraper-encrypto-inputstream-2-outputstream

@@ -114,14 +114,14 @@ Resp:
                                           dst-addr
                                           dst-port))
           read-buff (byte-array 4)]
-      (println "query remote : "  (seq req-package))
+      ;(println "query remote : "  (seq req-package))
       (.write os req-package)
       (.read is read-buff 0 4)
       (let [resp-length (bytearray->int read-buff)
             resp-read-buff (byte-array resp-length)
             resp-payload-length (.read is resp-read-buff 0 resp-length)
             resp-rsp-code (bytearray->int resp-read-buff)]
-        (println "response of remote : "  resp-length (seq resp-read-buff))
+        ;(println "response of remote : "  resp-length (seq resp-read-buff))
         ; TODO parse buff. For now we just translate to int
         (if (and (= resp-payload-length resp-length) ; desire length == read length && code == 0x00
                  (= resp-rsp-code 0x0))
@@ -145,8 +145,8 @@ Resp:
                 open-access-key (.getBytes password "utf-8")
                 redirect-socket-result (open-connect-with-remote-server open-access-key method atyp dst-addr dst-port)
                 ]
-            (println "connect done")
-            (println redirect-socket-result)
+            ;(println "connect done")
+            ;(println redirect-socket-result)
             (.write os (build-connect-relay request redirect-socket-result))
             (if (= 0 (:rep redirect-socket-result))
               ;; loop read & write is streams
@@ -156,13 +156,12 @@ Resp:
                           pos (.getOutputStream proxy-socket)
                           cis is
                           cos os]
-                (println "start proxy loop: " (.getLocalPort proxy-socket))
-                ;; (doto (Thread. #(bind-inputstream-to-outputstream pis cos "pis->cos")) (.start))
-                ;; (bind-inputstream-to-outputstream cis pos "cis->pos")
+                ;(println "start proxy loop: " (.getLocalPort proxy-socket))
                 (doto (Thread. #((get-in crypto/crypto-methods [(:crypto-method local-config) :unwraper])  pis cos "pis->cos" password)) (.start))
                 ((get-in crypto/crypto-methods [(:crypto-method local-config) :wrapper]) cis pos "cis->pos" password)
 
-                (println "end proxy loop"))
+                ;(println "end proxy loop")
+                )
               ))
           (= cmd 0x2)                   ; Bind
           (.write os method-not-supported)
@@ -183,15 +182,15 @@ Resp:
 (defn handle-client-request
   ""
   [socket]
-  (println "new client request start\n")
+  ;(println "new client request start\n")
   (let [input-stream (.getInputStream socket)
         output-stream (.getOutputStream socket)
         request (process-sock5-handshake-request input-stream)]
-    (println request)
+    ;(println request)
     (if (= (:version request) 5)
       (do (.write output-stream accept-request)
           (let [request (parse-sock5-request input-stream)]
-            (dump-sock5-request-map request)
+            ;(dump-sock5-request-map request)
             (process-sock5-request request socket input-stream output-stream)))
       (.write output-stream deny-request))))
 
