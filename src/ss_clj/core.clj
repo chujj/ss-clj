@@ -30,11 +30,18 @@
       (let [socket (.accept server-socket)]
         (doto (Thread. #(handler socket)) (.start))))))
 
-(defn ss-proxy
+(defn dev-test
   ""
-  []
-  (doto (Thread. #(socket-server remote-server 8009)) (.start))
-  (socket-server local-server 8008))
+  [commandline-config]
+  (let [ 
+        remote-server-config {:crypto-method (:crypto-method commandline-config)
+                              :password (:password commandline-config)}
+        local-server-config {:rserver-addr "127.0.0.1"
+                             :rserver-port 8009
+                             :crypto-method (:crypto-method commandline-config)
+                             :password (:password commandline-config)}]
+    (doto (Thread. #(socket-server (remote-server remote-server-config) 8009)) (.start))
+    (socket-server (local-server local-server-config) 8008)))
 
 (def cli-options
   ;; An option with a required argument
@@ -87,7 +94,7 @@
 
       (= mode "dev-test")
       (do (println mode)
-          (ss-proxy))
+          (dev-test (:options argument)))
 
       (= mode "socks5-proxy")                            ; socks5-proxy
       (do (println mode) (socket-server socks5-proxy-server port))
