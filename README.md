@@ -1,36 +1,29 @@
 # ss-clj
 
-FIXME: description
+Clojure learn by doing --- Exchange Socket data from two server encrypted. Just like SS.
 
 ## Installation
 
-Download from http://example.com/FIXME.
+![snapshot-runnable-jar](ss-clj-0.1.0-SNAPSHOT-standalone.jar)
 
 ## Usage
 
-FIXME: explanation
+Server side:
 
-    $ java -jar ss-clj-0.1.0-standalone.jar [args]
+    $ java -jar downloaded.jar --run-mode=rserver --port=[listen-port]  --password=[16-char-pwd]  --crypto-method=aes-cbc-128
 
-## Options
+Client side:
 
-FIXME: listing of options this app accepts.
+    $ java -jar downloaded.jar --run-mode=lserver --port=[listen-port] --rserver-addr=[server-ip] --rserver-port=[server-listening-port] --password=[16-char-pwd]  --crypto-method=aes-cbc-128
 
-## Examples
+More:
+   
+    $ java -jar downloaded.jar -h
 
-...
 
 ### Bugs
 
-...
+1. Some many children threads create now, no timeout watch yet.
+2. client-server handshake not encrypto well
 
-### Any Other Sections
-### That You Think
-### Might be Useful
 
-## License
-
-Copyright © 2015 FIXME
-
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
