@@ -7,7 +7,7 @@
 
 
 (def println #(apply clojure.core/println "SERVER: " %&))
-
+(def local-config {})
 
 (declare parse-dst-addr)
 
@@ -85,7 +85,8 @@
                   dst-port (get-in request [:dst :dst-port])
                   host (bytearray->string dst-addr)
                   port (bytearray->int    dst-port)
-                  redirect-socket-result (open-connect host port)]
+                  redirect-socket-result (open-connect host port)
+                  password (:password local-config)]
               (println host)
               (.write os (build-open-access-reply request redirect-socket-result))
               (if (= 0 (:rep redirect-socket-result))
@@ -99,8 +100,8 @@
                   (println "start proxy loop: " (.getLocalPort proxy-socket))
                   ;; (doto (Thread. #(bind-inputstream-to-outputstream pis cos "pis->cos")) (.start))
                   ;; (bind-inputstream-to-outputstream cis pos "cis->pos")
-                  (doto (Thread. #(crypto/wraper-encrypto-inputstream-2-outputstream pis cos "pis->cos")) (.start))
-                  (crypto/unwraper-encrypto-inputstream-2-outputstream cis pos "cis->pos")
+                  (doto (Thread. #((get-in crypto/crypto-methods [(:crypto-method local-config) :wrapper])  pis cos "pis->cos" password)) (.start))
+                  ((get-in crypto/crypto-methods [(:crypto-method local-config) :unwraper]) cis pos "cis->pos" password)
                   (println "end proxy loop"))
                 )
               ))
@@ -117,10 +118,14 @@
         output-stream (.getOutputStream socket)
         request (process-openaccess-handshake-request input-stream)]
     (println request)
-    (if (=                              ; test open-access-key
-         (String. (crypto/decrypto (:open-access-key request) crypto/TEST_KEY))
-         crypto/TEST_KEY)             
+    (if (if (= "plain" (:crypto-method local-config)) (= (take 16 (repeat 0)) (seq (:open-access-key request)))
+            (=                          ; test open-access-key
+             (String. (crypto/decrypto (:open-access-key request) (:password local-config)))
+             (:password local-config)))             
       (process-validate-open-access-request request socket input-stream output-stream)
       (.write output-stream deny-request))
     ))
 
+(defn init-config
+  [config-map]
+  (def local-config config-map))

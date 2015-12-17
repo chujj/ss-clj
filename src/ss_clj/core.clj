@@ -19,8 +19,8 @@
              continue?))))
 
 (def socks5-proxy-server s5server/handle-client-request)
-(def local-server lserver/handle-client-request)
-(def remote-server rserver/handle-client-request)
+(def local-server #(do (lserver/init-config %) lserver/handle-client-request))
+(def remote-server #(do (rserver/init-config %) rserver/handle-client-request))
 
 (defn socket-server
   [handler port]
@@ -70,9 +70,7 @@
    ;; A boolean option defaulting to nil
    ["-h" "--help"]])
 
-(defn setup-crypto-method
-  [a b]
-  (println a "  ---   " b))
+
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -96,12 +94,10 @@
 
       (= mode "rserver")                ;rserver
       (do (println mode)
-          (setup-crypto-method (get-in argument [:options :crypto-method]) (get-in argument [:options :password]))
-          (socket-server remote-server port))
+          (socket-server (remote-server (:options argument)) port))
 
       (= mode "lserver")                ;lserver
       (do (println mode)
-          (setup-crypto-method (get-in argument [:options :crypto-method]) (get-in argument [:options :password]))
-          (socket-server local-server port))
+          (socket-server (local-server (:options argument)) port))
           ))
   )

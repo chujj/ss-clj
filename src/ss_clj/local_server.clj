@@ -8,6 +8,8 @@
 
 (def println #(apply clojure.core/println "LOCAL: " %&))
 
+(def local-config nil)
+
 (defn process-sock5-handshake-request
   "process sock5 handshake-request into a map, like:
   {:version n, :nmethods n, :methods '(& n)}"
@@ -100,11 +102,12 @@ Resp:
 "
   [open-access-key method atyp dst-addr dst-port]
   (try
-    (let [remote-socket (Socket. "127.0.0.1" 8009)
+    (let [remote-socket (Socket. (:rserver-addr local-config) (:rserver-port local-config))
           is (.getInputStream remote-socket)
           os (.getOutputStream remote-socket)
           domain-addr-prefix-barray (if (= atyp 3) (byte-array 1 [(unchecked-byte (count dst-addr))]) [])
-          req-package (byte-array (concat (crypto/encrypto open-access-key crypto/TEST_KEY)
+          req-package (byte-array (concat (if (= "plain" (:crypto-method local-config)) (byte-array 16)
+                                              (crypto/encrypto open-access-key (:password local-config)))
                                           (byte-array [(int2byte method)])
                                           (byte-array [(int2byte atyp)])
                                           domain-addr-prefix-barray
@@ -138,8 +141,10 @@ Resp:
                 dst-port (get-in request [:dst :dst-port])
                 method 1
                 atyp (:atyp request)
-                open-access-key (.getBytes crypto/TEST_KEY "utf-8")
-                redirect-socket-result (open-connect-with-remote-server open-access-key method atyp dst-addr dst-port)]
+                password (:password local-config)
+                open-access-key (.getBytes password "utf-8")
+                redirect-socket-result (open-connect-with-remote-server open-access-key method atyp dst-addr dst-port)
+                ]
             (println "connect done")
             (println redirect-socket-result)
             (.write os (build-connect-relay request redirect-socket-result))
@@ -154,8 +159,8 @@ Resp:
                 (println "start proxy loop: " (.getLocalPort proxy-socket))
                 ;; (doto (Thread. #(bind-inputstream-to-outputstream pis cos "pis->cos")) (.start))
                 ;; (bind-inputstream-to-outputstream cis pos "cis->pos")
-                (doto (Thread. #(crypto/unwraper-encrypto-inputstream-2-outputstream pis cos "pis->cos")) (.start))
-                (crypto/wraper-encrypto-inputstream-2-outputstream cis pos "cis->pos")
+                (doto (Thread. #((get-in crypto/crypto-methods [(:crypto-method local-config) :unwraper])  pis cos "pis->cos" password)) (.start))
+                ((get-in crypto/crypto-methods [(:crypto-method local-config) :wrapper]) cis pos "cis->pos" password)
 
                 (println "end proxy loop"))
               ))
@@ -189,3 +194,7 @@ Resp:
             (dump-sock5-request-map request)
             (process-sock5-request request socket input-stream output-stream)))
       (.write output-stream deny-request))))
+
+(defn init-config
+  [config-map]
+  (def local-config config-map))

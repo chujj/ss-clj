@@ -31,12 +31,8 @@
       (println cipher data)
       (.doFinal cipher data))))
 
-
-
-(def TEST_KEY "0123456789123456")
-
 (defn wraper-encrypto-inputstream-2-outputstream
-  [is os whoami]
+  [is os whoami key]
   (let [package-length 512
         resver-length 2
         payload-length (- package-length resver-length)
@@ -51,7 +47,7 @@
                  ;; copy resver length
                  (aset-byte buff 0 (aget readed-count-raw-array 0))
                  (aset-byte buff 1 (aget readed-count-raw-array 1))
-                 (.write os (encrypto buff TEST_KEY))
+                 (.write os (encrypto buff key))
                  ))
              continue?))))
 
@@ -64,14 +60,14 @@
       readed-count)))
 
 (defn unwraper-encrypto-inputstream-2-outputstream
-  [is os whoami]
+  [is os whoami key]
   (let [package-length 512
         resver-length 2
         payload-length (- package-length resver-length)
         buff (byte-array package-length)
         ]
     (while (let [readed-count (blockread-inputstream-align is buff 0 package-length)
-                 after-de-buff (decrypto buff  TEST_KEY)
+                 after-de-buff (decrypto buff  key)
                  payload-array (byte-array (take resver-length after-de-buff))
                  payload-size (bytearray->int payload-array)
                  continue? (> readed-count 0)
@@ -84,25 +80,20 @@
 
 (def crypto-methods
   {"plain" {:init_fn #()
-            :wraper bind-inputstream-to-outputstream
-            :unwraper bind-inputstream-to-outputstream}
+            :wrapper #(apply bind-inputstream-to-outputstream (take 3 %&))
+            :unwraper #(apply bind-inputstream-to-outputstream (take 3 %&))}
    "aes-cbc-128" {:init_fn #(println "no implement")
                   :wrapper wraper-encrypto-inputstream-2-outputstream
                   :unwraper unwraper-encrypto-inputstream-2-outputstream}})
 
-(defn get-crypto-method
-  "{:crypto-method \"plain/aes-cbc-128\" :password \"[16bytes]\"}"
-  [crypto-config which-fn]
-  (get-in crypto-methods [(:crypto-method crypto-config) which-fn]))
-
-
 (defn test-wrap-unwrap
   [dataout]
-  (let [data dataout]
+  (let [data dataout
+        TEST_KEY "0123456789123456"]
     (with-open [before-en-is (ByteArrayInputStream. (.getBytes data "utf-8"))
                 after-en-os (FileOutputStream. (File. "/home/zhujj/tmp2"))]
-      (wraper-encrypto-inputstream-2-outputstream before-en-is after-en-os "nothing"))
+      (wraper-encrypto-inputstream-2-outputstream before-en-is after-en-os "nothing" TEST_KEY))
     (with-open [before-de-is (FileInputStream. (File. "/home/zhujj/tmp2"))
                 after-de-os (FileOutputStream. (File. "/home/zhujj/tmp3"))]
-      (unwraper-encrypto-inputstream-2-outputstream before-de-is after-de-os "nothing"))
+      (unwraper-encrypto-inputstream-2-outputstream before-de-is after-de-os "nothing" TEST_KEY))
     (slurp "/home/zhujj/tmp3")))
